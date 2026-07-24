@@ -9,18 +9,20 @@
 #include <windows.h>
 using namespace std;
 
-// ============ CONSTANTES ============
-// Posições X e Y iniciais do cavalo no tabuleiro
-const int POSICAO_INICIAL[2] = {1, 2};
+// ============ CONFIGURAÇÕES ============
+// Posições X (colunas) e Y (linhas) iniciais do cavalo no tabuleiro
+const int POSICAO_INICIAL[2] = {0, 0};
 
-// Tabuleiro de xadrez representado como uma matriz 8x8
+// Delay entre cada passo do cavalo (em milissegundos)
+const int DELAY = 100;
+
+// ============ CONSTANTES ============
+
+// Tabuleiro de xadrez representado como uma matriz 8x8 (inalteravel)
 const int TAMANHO_MATRIZ = 8;
 
 // Número máximo de movimentos possíveis para o cavalo (inalteravel)
 const int MAX_MOVIMENTOS = 8;
-
-// Delay entre cada passo do cavalo (em milissegundos)
-const int DELAY = 0;
 
 // ============ VARIÁVEIS GLOBAIS ============
 // Tabuleiro
@@ -58,16 +60,15 @@ void exibirTabuleiro() {
     cout << "Eixo X = colunas, Eixo Y = linhas" << endl;
 
     cout << "   ";
-    for (int j = 0; j < TAMANHO_MATRIZ; j++) {
-        cout << j << " ";
+    for (int x = 0; x < TAMANHO_MATRIZ; x++) {
+        cout << x << " ";
     }
-
     cout << endl;
 
-    for (int i = 0; i < TAMANHO_MATRIZ; i++) {
-        cout << i << " |";
-        for (int j = 0; j < TAMANHO_MATRIZ; j++) {
-            cout << board[i][j] << " ";
+    for (int y = 0; y < TAMANHO_MATRIZ; y++) {
+        cout << y << " |";
+        for (int x = 0; x < TAMANHO_MATRIZ; x++) {
+            cout << board[x][y] << " ";
         }
         cout << endl;
     }
@@ -143,17 +144,19 @@ int main() {
     // === Implementação do algoritmo estratégico para o passeio do cavalo ===
     pair<int, int> proximo = proximoMovimento(cavalo.x, cavalo.y);
     while (proximo.first != -1 && proximo.second != -1) {
+        // Renderiza console e aguarda um pequeno delay para continuar
+        renderizarConsole();
+        std::this_thread::sleep_for(std::chrono::milliseconds(DELAY));
+
         board[cavalo.x][cavalo.y] = 'X';
         cavalo.x = proximo.first;
         cavalo.y = proximo.second;
         passos++;
         board[cavalo.x][cavalo.y] = 'K';
         proximo = proximoMovimento(cavalo.x, cavalo.y);
-
-        // Renderiza console e aguarda um pequeno delay para continuar
-        renderizarConsole();
-        std::this_thread::sleep_for(std::chrono::milliseconds(DELAY));
     }
+    // Renderiza o estado final do tabuleiro
+    renderizarConsole();
 
     // === Calculo do tempo de execução do algoritmo ===
     auto fim = std::chrono::high_resolution_clock::now();
