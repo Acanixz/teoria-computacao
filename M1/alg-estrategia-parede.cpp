@@ -5,15 +5,14 @@
 // aumentando assim as chances de completar o passeio com sucesso.
 
 #include <iostream>
+#include <iomanip>
+#include <limits>
 #include <thread>
 #include <chrono>
 #include <windows.h>
 using namespace std;
 
 // ============ CONFIGURAÇÕES ============
-// Posições X (colunas) e Y (linhas) iniciais do cavalo no tabuleiro
-const int POSICAO_INICIAL[2] = {0, 0};
-
 // Delay entre cada passo do cavalo (em milissegundos)
 const int DELAY = 0;
 
@@ -25,15 +24,20 @@ const int TAMANHO_MATRIZ = 8;
 // Número máximo de movimentos possíveis para o cavalo (inalteravel)
 const int MAX_MOVIMENTOS = 8;
 
-// === Caracteres ===
-const char char_cavalo = 'C';
-const char char_visitado = 'X';
-const char char_nao_visitado = '.';
+// Valor usado para marcar uma casa ainda não visitada
+const int NAO_VISITADO = -1;
+
+// Largura (em caracteres) usada para exibir cada número de passo no tabuleiro
+const int LARGURA_CASA = 3;
 
 // ============ VARIÁVEIS GLOBAIS ============
 // Tabuleiro
-// . indica espaço não visitado, C indica posição do cavalo, e X indica casas já visitadas
-char board[TAMANHO_MATRIZ][TAMANHO_MATRIZ];
+// Cada posição guarda o número do passo em que foi visitada (0 = posição inicial),
+// ou NAO_VISITADO (-1) se a casa ainda não foi visitada
+int board[TAMANHO_MATRIZ][TAMANHO_MATRIZ];
+
+// Posição inicial do cavalo (definida pelo usuário a cada execução)
+int posicao_inicial[2] = {0, 0};
 
 // Cavalo
 struct {
@@ -52,29 +56,33 @@ int passos = 1;
 bool passeio_aberto = true;
 
 // ============ FUNÇÕES AUXILIARES ============
-// Inicializa o tabuleiro com espaços não visitados
+// Inicializa o tabuleiro com casas não visitadas
 void inicializarTabuleiro() {
     for (int i = 0; i < TAMANHO_MATRIZ; i++) {
         for (int j = 0; j < TAMANHO_MATRIZ; j++) {
-            board[i][j] = char_nao_visitado;
+            board[i][j] = NAO_VISITADO;
         }
     }
 }
 
-// Exibe visualmente o tabuleiro no console, incluindo indicadores numéricos e eixo X e Y
+// Exibe visualmente o tabuleiro no console, com o número do passo em cada casa, incluindo indicadores numéricos e eixo X e Y
 void exibirTabuleiro() {
     cout << "Eixo X = colunas, Eixo Y = linhas" << endl;
 
     cout << "   ";
     for (int x = 0; x < TAMANHO_MATRIZ; x++) {
-        cout << x << " ";
+        cout << setw(LARGURA_CASA) << x;
     }
     cout << endl;
 
     for (int y = 0; y < TAMANHO_MATRIZ; y++) {
         cout << y << " |";
         for (int x = 0; x < TAMANHO_MATRIZ; x++) {
-            cout << board[x][y] << " ";
+            if (board[x][y] == NAO_VISITADO) {
+                cout << setw(LARGURA_CASA) << ".";
+            } else {
+                cout << setw(LARGURA_CASA) << board[x][y];
+            }
         }
         cout << endl;
     }
@@ -86,7 +94,7 @@ bool posicaoValida(int x, int y) {
     bool nos_limites = (x >= 0 && x < TAMANHO_MATRIZ && y >= 0 && y < TAMANHO_MATRIZ);
 
     // Regra 2: Posição não foi visitada ainda?
-    bool posicao_nao_visitada = (board[x][y] == char_nao_visitado);
+    bool posicao_nao_visitada = (board[x][y] == NAO_VISITADO);
 
     return (nos_limites && posicao_nao_visitada);
 }
@@ -135,16 +143,31 @@ void renderizarConsole() {
     exibirTabuleiro();
 }
 
-int main() {
-    // === Preparação do console para UTF-8 ===
-    SetConsoleOutputCP(CP_UTF8);
-    SetConsoleCP(CP_UTF8);
+// Lê e valida a posição X e Y iniciais informadas pelo usuário
+void lerPosicaoInicial() {
+    int x = -1, y = -1;
+    while (true) {
+        cout << "Defina a posição X e Y iniciais (numeros separados por espaços)" << endl;
+        if (cin >> x >> y && x >= 0 && x < TAMANHO_MATRIZ && y >= 0 && y < TAMANHO_MATRIZ) {
+            break;
+        }
+        // Limpa o estado de erro do cin e descarta o resto da linha, caso a entrada seja inválida
+        cin.clear();
+        cin.ignore(numeric_limits<streamsize>::max(), '\n');
+        cout << "Posição inválida! Informe dois números entre 0 e " << (TAMANHO_MATRIZ - 1) << "." << endl;
+    }
+    posicao_inicial[0] = x;
+    posicao_inicial[1] = y;
+}
 
+// Executa uma rodada completa do algoritmo do passeio do cavalo a partir de posicao_inicial
+void executarAlgoritmo() {
     // === Inicialização do tabuleiro e das variáveis necessárias ===
     inicializarTabuleiro();
-    cavalo.x = POSICAO_INICIAL[0];
-    cavalo.y = POSICAO_INICIAL[1];
-    board[cavalo.x][cavalo.y] = char_cavalo;
+    passos = 1;
+    cavalo.x = posicao_inicial[0];
+    cavalo.y = posicao_inicial[1];
+    board[cavalo.x][cavalo.y] = passos;
     auto inicio = std::chrono::high_resolution_clock::now();
 
     // === Implementação do algoritmo estratégico para o passeio do cavalo ===
@@ -154,11 +177,10 @@ int main() {
         // renderizarConsole();
         std::this_thread::sleep_for(std::chrono::milliseconds(DELAY));
 
-        board[cavalo.x][cavalo.y] = char_visitado;
         cavalo.x = proximo.first;
         cavalo.y = proximo.second;
         passos++;
-        board[cavalo.x][cavalo.y] = char_cavalo;
+        board[cavalo.x][cavalo.y] = passos;
         proximo = proximoMovimento(cavalo.x, cavalo.y);
     }
     // Renderiza o estado final do tabuleiro
@@ -175,7 +197,7 @@ int main() {
     for (int i = 0; i < MAX_MOVIMENTOS; i++) {
         int novo_x = cavalo.x + cavalo.movimentos[i][0];
         int novo_y = cavalo.y + cavalo.movimentos[i][1];
-        if (novo_x == POSICAO_INICIAL[0] && novo_y == POSICAO_INICIAL[1]) {
+        if (novo_x == posicao_inicial[0] && novo_y == posicao_inicial[1]) {
             pode_voltar = true;
             break;
         }
@@ -188,15 +210,53 @@ int main() {
 
     cout << "===== Dados do passeio =====" << endl;
 
-    cout << "Posição inicial do cavalo: (" << POSICAO_INICIAL[0] << ", " << POSICAO_INICIAL[1] << ")" << endl;
+    cout << "Posição inicial do cavalo: (" << posicao_inicial[0] << ", " << posicao_inicial[1] << ")" << endl;
     cout << "Posição final do cavalo: (" << cavalo.x << ", " << cavalo.y << ")" << endl;
     cout << "Número total de passos realizados: " << passos << endl;
     cout << "O passeio é " << (passeio_aberto ? "aberto" : "fechado") << "." << endl;
     cout << "Tempo de execução: " << tempo_execucao << " ms" << endl;
 
     cout << "=============================" << endl;
+}
 
-    cout << "Aperte enter para sair..." << endl;
-    cin.ignore();
+int main() {
+    // === Preparação do console para UTF-8 ===
+    SetConsoleOutputCP(CP_UTF8);
+    SetConsoleCP(CP_UTF8);
+
+    int opcao = -1;
+    bool primeira_execucao = true;
+
+    while (true) {
+        // === Menu ===
+        if (!primeira_execucao) {
+            cout << endl;
+            cout << "==================== LOOP ====================" << endl;
+            cout << endl;
+        }
+        primeira_execucao = false;
+
+        cout << "1 - Executar algoritmo" << endl;
+        cout << "2 - Sair" << endl;
+
+        if (!(cin >> opcao)) {
+            cin.clear();
+            cin.ignore(numeric_limits<streamsize>::max(), '\n');
+            continue;
+        }
+
+        cout << endl << "===" << endl << endl;
+
+        if (opcao == 2) {
+            break;
+        } else if (opcao == 1) {
+            lerPosicaoInicial();
+            cout << endl << "===" << endl << endl;
+            executarAlgoritmo();
+        } else {
+            cout << "Opção inválida!" << endl;
+        }
+    }
+
     return 0;
 }
