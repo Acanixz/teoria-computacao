@@ -4,6 +4,8 @@
 // O algoritmo utiliza uma abordagem heurística, priorizando movimentos que levam a casas com menos opções de saída, 
 // aumentando assim as chances de completar o passeio com sucesso.
 
+#define NOMINMAX
+
 #include <iostream>
 #include <iomanip>
 #include <limits>
