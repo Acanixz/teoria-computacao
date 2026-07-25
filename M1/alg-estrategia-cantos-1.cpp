@@ -6,6 +6,7 @@
 
 #include <iostream>
 #include <thread>
+#include <chrono>
 #include <windows.h>
 using namespace std;
 
@@ -14,7 +15,7 @@ using namespace std;
 const int POSICAO_INICIAL[2] = {0, 0};
 
 // Delay entre cada passo do cavalo (em milissegundos)
-const int DELAY = 100;
+const int DELAY = 0;
 
 // ============ CONSTANTES ============
 
@@ -24,9 +25,14 @@ const int TAMANHO_MATRIZ = 8;
 // Número máximo de movimentos possíveis para o cavalo (inalteravel)
 const int MAX_MOVIMENTOS = 8;
 
+// === Caracteres ===
+const char char_cavalo = 'C';
+const char char_visitado = 'X';
+const char char_nao_visitado = '.';
+
 // ============ VARIÁVEIS GLOBAIS ============
 // Tabuleiro
-// . indica espaço não visitado, K indica posição do cavalo, e X indica casas já visitadas
+// . indica espaço não visitado, C indica posição do cavalo, e X indica casas já visitadas
 char board[TAMANHO_MATRIZ][TAMANHO_MATRIZ];
 
 // Cavalo
@@ -40,7 +46,7 @@ struct {
 long long tempo_execucao = 0;
 
 // Numero de passos realizados pelo cavalo
-int passos = 0;
+int passos = 1;
 
 // Solução final do passeio é aberto (Não volta ao ponto de partida) ou fechado (Volta ao ponto de partida)
 bool passeio_aberto = true;
@@ -50,7 +56,7 @@ bool passeio_aberto = true;
 void inicializarTabuleiro() {
     for (int i = 0; i < TAMANHO_MATRIZ; i++) {
         for (int j = 0; j < TAMANHO_MATRIZ; j++) {
-            board[i][j] = '.';
+            board[i][j] = char_nao_visitado;
         }
     }
 }
@@ -80,7 +86,7 @@ bool posicaoValida(int x, int y) {
     bool nos_limites = (x >= 0 && x < TAMANHO_MATRIZ && y >= 0 && y < TAMANHO_MATRIZ);
 
     // Regra 2: Posição não foi visitada ainda?
-    bool posicao_nao_visitada = (board[x][y] == '.');
+    bool posicao_nao_visitada = (board[x][y] == char_nao_visitado);
 
     return (nos_limites && posicao_nao_visitada);
 }
@@ -138,21 +144,21 @@ int main() {
     inicializarTabuleiro();
     cavalo.x = POSICAO_INICIAL[0];
     cavalo.y = POSICAO_INICIAL[1];
-    board[cavalo.x][cavalo.y] = 'K';
+    board[cavalo.x][cavalo.y] = char_cavalo;
     auto inicio = std::chrono::high_resolution_clock::now();
 
     // === Implementação do algoritmo estratégico para o passeio do cavalo ===
     pair<int, int> proximo = proximoMovimento(cavalo.x, cavalo.y);
     while (proximo.first != -1 && proximo.second != -1) {
         // Renderiza console e aguarda um pequeno delay para continuar
-        renderizarConsole();
+        // renderizarConsole();
         std::this_thread::sleep_for(std::chrono::milliseconds(DELAY));
 
-        board[cavalo.x][cavalo.y] = 'X';
+        board[cavalo.x][cavalo.y] = char_visitado;
         cavalo.x = proximo.first;
         cavalo.y = proximo.second;
         passos++;
-        board[cavalo.x][cavalo.y] = 'K';
+        board[cavalo.x][cavalo.y] = char_cavalo;
         proximo = proximoMovimento(cavalo.x, cavalo.y);
     }
     // Renderiza o estado final do tabuleiro
@@ -174,11 +180,7 @@ int main() {
             break;
         }
     }
-    if (pode_voltar) {
-        passeio_aberto = false;
-    } else {
-        passeio_aberto = true;
-    }
+    passeio_aberto = !pode_voltar;
 
     // === Exibição dos resultados finais ===
     cout << "Passeio do cavalo concluído com sucesso!" << endl;
