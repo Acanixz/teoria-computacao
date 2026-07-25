@@ -1,162 +1,238 @@
-//O PASSEIO DO CAVALO
- 
 #include <iostream>
-#include <vector>
-#include <chrono>
 #include <thread>
-#include <iomanip>
-#include <cstdlib>
+#include <windows.h>
+#include <chrono>
+#include <ctime>
 using namespace std;
 
-const int TAMANHO_TABULEIRO = 8;   // Tabuleiro de xadrez oficial (8x8)
-const int TOTAL_CASAS = 64;        // Quantidade de casas a visitar
+// ============ CONFIGURAÇÕES ============
+// Posições X (colunas) e Y (linhas) iniciais do cavalo no tabuleiro
+const int POSICAO_INICIAL[2] = {0, 0};
 
-const int DESLOCAMENTO_LINHA[8] =
-{
-     2,  1, -1, -2,
-    -2, -1,  1,  2
-};
-const int DESLOCAMENTO_COLUNA[8] =
-{
-     1,  2,  2,  1,
-    -1, -2, -2, -1
-};
 
-// Contador global de tentativas feitas pelo backtracking.
-long long tentativas = 0;
+// ============ CONSTANTES ============
 
-const long long INTERVALO_RELATORIO_MS = 160000; // 160 segundos mostra a tela
+// 10 minutos
+const long long LIMITE_TEMPO_MS = 10 * 60 * 1000;
 
-// Instante em que a busca comecou, usado para calcular o tempo decorrido.
-chrono::steady_clock::time_point instanteInicial;
+// Tabuleiro de xadrez representado como uma matriz 8x8 (inalteravel)
+const int TAMANHO_MATRIZ = 8;
 
-// Instante do ultimo relatorio de progresso impresso (para saber quando
-chrono::steady_clock::time_point ultimoRelatorio;
+// Número máximo de movimentos possíveis para o cavalo (inalteravel)
+const int MAX_MOVIMENTOS = 8;
 
-//limparTela
+// ============ VARIÁVEIS GLOBAIS ============
+// Tabuleiro
+// . indica espaço não visitado, C indica posição do cavalo, e X indica casas já visitadas
+char board[TAMANHO_MATRIZ][TAMANHO_MATRIZ];
 
-void limparTela(){
-#ifdef _WIN32
-    int r = system("cls");
-#else
-    int r = system("clear");
-#endif
-    (void)r;
+// Cavalo
+struct {
+    
+    int x, y;
+    int movimentos[MAX_MOVIMENTOS][2] = {{2, 1}, {1, 2}, {-1, 2}, {-2, 1}, {-2, -1}, {-1, -2}, {1, -2}, {2, -1}};
+} cavalo;
+
+// Tempo de execução do algoritmo (em milissegundos)
+long long tempo_execucao = 0;
+
+
+// ============ FUNÇÕES AUXILIARES ============
+// Inicializa o tabuleiro com espaços não visitados
+void inicializarTabuleiro() {
+    for (int i = 0; i < TAMANHO_MATRIZ; i++) {
+        for (int j = 0; j < TAMANHO_MATRIZ; j++) {
+            board[i][j] = '.';
+        }
+    }
 }
 
- // exibirQuadro
+// Exibe visualmente o tabuleiro no console, incluindo indicadores numéricos e eixo X e Y
+void exibirTabuleiro() {
+    cout << "Eixo X = colunas, Eixo Y = linhas" << endl;
 
-void exibirQuadro(vector<vector<int>>& tabuleiro, int linhaAtual, int colunaAtual){
-    cout << "      O PASSEIO DO CAVALO\n";
+    cout << "   ";
+    for (int x = 0; x < TAMANHO_MATRIZ; x++) {
+        cout << x << " ";
+    }
+    cout << endl;
 
-    for(int linha=0; linha<TAMANHO_TABULEIRO; linha++){
-        for(int coluna=0; coluna<TAMANHO_TABULEIRO; coluna++){
-            if(linha==linhaAtual && coluna==colunaAtual)
-                cout << " C ";                                   // Cavalo esta aqui agora.
-            else if(tabuleiro[linha][coluna] == -2)
-                cout << " . ";
-            else if(tabuleiro[linha][coluna] >= 0)
-                cout << setw(2) << tabuleiro[linha][coluna] << " "; // Casa ja visitada: mostra o passo.
-            else
-                cout << " - ";                                   // Casa ainda nao visitada.
+    for (int y = 0; y < TAMANHO_MATRIZ; y++) {
+        cout << y << " |";
+        for (int x = 0; x < TAMANHO_MATRIZ; x++) {
+            cout << board[x][y] << " ";
         }
         cout << endl;
     }
-
-    auto agora = chrono::steady_clock::now();
-    auto tempoDecorridoMs = chrono::duration_cast<chrono::milliseconds>(agora - instanteInicial).count();
-
-    cout << "\nTentativas: " << tentativas;
-    cout << "\nTempo: " << tempoDecorridoMs << " ms";
-    cout << "\n";
-}
-
-/*
- * movimentoValido
- * ----------------
- * Um movimento e valido quando a casa de destino (linha, coluna):
- *   1) existe dentro do tabuleiro 0 a 7 em cada eixo e
- *   2) ainda nao foi visitada tabuleiro[linha][coluna] == -1
- */
-bool movimentoValido(int linha, int coluna, vector<vector<int>>& tabuleiro){
-    return linha>=0 && linha<TAMANHO_TABULEIRO &&
-           coluna>=0 && coluna<TAMANHO_TABULEIRO &&
-           tabuleiro[linha][coluna]==-1;
 }
 
 
-  //relatarProgressoSePreciso
+// Verifica se a posição (x, y) é válida para o cavalo se mover
+bool posicaoValida(int x, int y) {
+    // Regra 1: Posição está dentro dos limites do tabuleiro?
+    bool nos_limites = (x >= 0 && x < TAMANHO_MATRIZ && y >= 0 && y < TAMANHO_MATRIZ);
 
-void relatarProgressoSePreciso(){
-    auto agora = chrono::steady_clock::now();
-    auto desdeUltimoRelatorioMs = chrono::duration_cast<chrono::milliseconds>(agora - ultimoRelatorio).count();
+    // Regra 2: Posição não foi visitada ainda?
+    bool posicao_nao_visitada = (board[x][y] == '.');
 
-    if(desdeUltimoRelatorioMs < INTERVALO_RELATORIO_MS)
-        return;
-
-    auto tempoTotalMs = chrono::duration_cast<chrono::milliseconds>(agora - instanteInicial).count();
-    cout << "Tentativas: " << tentativas << " | Tempo decorrido: " << tempoTotalMs << " ms\n";
-
-    ultimoRelatorio = agora;
+    return (nos_limites && posicao_nao_visitada);
 }
 
-
-  //passeioDoCavalo
-
-bool passeioDoCavalo(vector<vector<int>>& tabuleiro, int linha, int coluna, int passoAtual){
-    if(passoAtual==TOTAL_CASAS)
-        return true; // Todas as casas foram visitadas: passeio completo.
-
-    for(int i=0; i<8; i++){
-        int novaLinha = linha + DESLOCAMENTO_LINHA[i];
-        int novaColuna = coluna + DESLOCAMENTO_COLUNA[i];
-
-        if(movimentoValido(novaLinha, novaColuna, tabuleiro)){
-            tentativas++;
-            relatarProgressoSePreciso(); // So imprime algo a cada 160s.
-
-            tabuleiro[novaLinha][novaColuna] = passoAtual;
-
-            if(passeioDoCavalo(tabuleiro, novaLinha, novaColuna, passoAtual+1))
-                return true;
-
-            // Backtracking: desfaz o caminho errado, sem exibir nada na tela.
-            tabuleiro[novaLinha][novaColuna] = -1;
+// Retorna o número de movimentos válidos disponíveis a partir da posição (x, y)
+int contarMovimentosValidos(int x, int y) {
+    int count = 0;
+    for (int i = 0; i < MAX_MOVIMENTOS; i++) {
+        int novo_x = x + cavalo.movimentos[i][0];
+        int novo_y = y + cavalo.movimentos[i][1];
+        if (posicaoValida(novo_x, novo_y)) {
+            count++;
         }
     }
-
-    return false; // Nenhum movimento a partir daqui leva a uma solucao.
+    return count;
 }
 
-int main(){
-    int linhaInicial, colunaInicial;
+// Retorna o próximo movimento aleatório e válido
+pair<int, int> proximoMovimento(int x, int y) {
+    int menor_opcoes = 9; // Inicialmente maior que o máximo possível (8)
+    pair<int, int> movimento = {-1, -1};
+    int novo_x;
+    int novo_y;
+    do{
+    novo_x = x + cavalo.movimentos[rand() % 8][0];
+    novo_y = y + cavalo.movimentos[rand() % 8][1];
+    }    
+    while(posicaoValida(novo_x, novo_y) == false); 
+    movimento = {novo_x, novo_y};
+    return movimento;  
+    
+}
 
-    cout << "      PASSEIO DO CAVALO 8x8\n\n";
-    cout << "Linha inicial (0-7): ";
-    cin >> linhaInicial;
-    cout << "Coluna inicial (0-7): ";
-    cin >> colunaInicial;
+    
 
-    // Tabuleiro 8x8 todo vazio (-1 = casa ainda nao visitada).
-    vector<vector<int>> tabuleiro(TAMANHO_TABULEIRO, vector<int>(TAMANHO_TABULEIRO, -1));
-    tabuleiro[linhaInicial][colunaInicial] = 0; // Casa inicial = passo 0.
+// Renderiza o console, mostrando o tabuleiro e o progresso do passeio do cavalo
+void renderizarConsole(int passos) {
+    system("cls"); // Limpa o console (Windows)
+    cout << "Passos realizados: " << passos << endl;
+    cout << "Posição atual do cavalo: (" << cavalo.x << ", " << cavalo.y << ")" << endl;
+    cout << "Tempo de execução: " << tempo_execucao << " ms" << endl;
+    exibirTabuleiro();
+}
 
-    instanteInicial = chrono::steady_clock::now();
-    ultimoRelatorio = instanteInicial; // Zera a contagem dos 160s a partir do inicio da busca.
+int main() {
+    // === Preparação do console para UTF-8 ===
+    SetConsoleOutputCP(CP_UTF8);
+    SetConsoleCP(CP_UTF8);
+    srand(time(0));
+    int passos = 1;
+    bool passeio_aberto = true;
 
-    cout << "\nBuscando : "
-            "aparece a cada 160 segundos, se a busca demorar tanto\n\n";
+    // === Variáveis para guardar a melhor tentativa, caso o tempo esgote ===
+    int melhor_passos = 0;
+    char melhor_board[TAMANHO_MATRIZ][TAMANHO_MATRIZ];
+    int melhor_x = POSICAO_INICIAL[0], melhor_y = POSICAO_INICIAL[1];
+    bool encontrou_solucao_completa = false;
+    long long tentativas = 0;
 
-    bool passeioEncontrado = passeioDoCavalo(tabuleiro, linhaInicial, colunaInicial, 1);
+    auto inicio = std::chrono::high_resolution_clock::now();
 
-    limparTela();
-    if(passeioEncontrado){
-        cout << "SOLUCAO ENCONTRADA!\n\n";
-        exibirQuadro(tabuleiro, -1, -1); // -1,-1 = nenhuma casa marcada como "C".
-    } else {
-        cout << "Nao foi possivel encontrar solucao.\n";
+
+
+    do{
+        tentativas++;
+        passeio_aberto = true;
+        passos = 1;
+
+        // === Inicialização do tabuleiro e das variáveis necessárias ===
+        inicializarTabuleiro();
+        cavalo.x = POSICAO_INICIAL[0];
+        cavalo.y = POSICAO_INICIAL[1];
+        board[cavalo.x][cavalo.y] = 'C';
+
+        // === Implementação do algoritmo de força bruta para o passeio do cavalo ===  
+        while (contarMovimentosValidos(cavalo.x,cavalo.y) > 0) {  
+            pair<int, int> proximo = proximoMovimento(cavalo.x, cavalo.y);     
+            board[cavalo.x][cavalo.y] = 'X';
+            cavalo.x = proximo.first;
+            cavalo.y = proximo.second;
+            passos++;
+            board[cavalo.x][cavalo.y] = 'C';    
+        }
+
+        // === Guarda a melhor tentativa até agora ===
+        if (passos > melhor_passos) {
+            melhor_passos = passos;
+            melhor_x = cavalo.x;
+            melhor_y = cavalo.y;
+            for (int i = 0; i < TAMANHO_MATRIZ; i++)
+                for (int j = 0; j < TAMANHO_MATRIZ; j++)
+                    melhor_board[i][j] = board[i][j];
+        }
+
+        // === Checa se o tempo limite foi atingido ===
+        auto agora = std::chrono::high_resolution_clock::now();
+        long long decorrido_ms = std::chrono::duration_cast<std::chrono::milliseconds>(agora - inicio).count();
+        if (decorrido_ms >= LIMITE_TEMPO_MS) {
+            break; // encerra o loop externo, sucesso ou não
+        }
+
+    }
+    while (passos < 64);
+
+    auto fim = std::chrono::high_resolution_clock::now();
+    tempo_execucao = std::chrono::duration_cast<std::chrono::milliseconds>(fim - inicio).count();
+
+    encontrou_solucao_completa = (passos == 64);
+
+    // === Se não achou solução completa, usa a melhor tentativa para exibir ===
+    if (!encontrou_solucao_completa) {
+        passos = melhor_passos;
+        cavalo.x = melhor_x;
+        cavalo.y = melhor_y;
+        for (int i = 0; i < TAMANHO_MATRIZ; i++)
+            for (int j = 0; j < TAMANHO_MATRIZ; j++)
+                board[i][j] = melhor_board[i][j];
     }
 
-    cout << "\nTotal tentativas: " << tentativas << endl;
+    // Renderiza o estado final do tabuleiro
+    renderizarConsole(passos);
+
+    // === Calculo se o passeio é aberto ou fechado ===
+        bool pode_voltar = false;
+        for (int i = 0; i < MAX_MOVIMENTOS; i++) {
+            int novo_x = cavalo.x + cavalo.movimentos[i][0];
+            int novo_y = cavalo.y + cavalo.movimentos[i][1];
+            if (novo_x == POSICAO_INICIAL[0] && novo_y == POSICAO_INICIAL[1]) {
+                pode_voltar = true;
+                break;
+            }
+        }
+        if (pode_voltar) {
+            passeio_aberto = false;
+        } else {
+            passeio_aberto = true;
+        }
+
+    // === Exibição dos resultados finais ===
+    if (encontrou_solucao_completa) {
+        cout << "Passeio do cavalo concluído com sucesso!" << endl;
+    } else {
+        cout << "Tempo limite de 10 minutos atingido. Nenhum passeio completo foi encontrado." << endl;
+        cout << "Exibindo a melhor tentativa (" << melhor_passos << " passos)." << endl;
+    }
+    cout << endl << endl;
+
+    cout << "===== Dados do passeio =====" << endl;
+    cout << "Posição inicial do cavalo: (" << POSICAO_INICIAL[0] << ", " << POSICAO_INICIAL[1] << ")" << endl;
+    cout << "Posição final do cavalo: (" << cavalo.x << ", " << cavalo.y << ")" << endl;
+    cout << "Número total de passos realizados: " << passos << endl;
+    cout << "Número de tentativas realizadas: " << tentativas << endl;
+    if (encontrou_solucao_completa) {
+        cout << "O passeio é " << (passeio_aberto ? "aberto" : "fechado") << "." << endl;
+    }
+    cout << "Tempo de execução: " << tempo_execucao << " ms" << endl;
+    cout << "=============================" << endl;
+
+    cout << "Aperte enter para sair..." << endl;
+    cin.ignore();
     return 0;
 }
